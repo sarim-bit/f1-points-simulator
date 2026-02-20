@@ -1,0 +1,6 @@
+fastf1
+streamlit
+pandas
+plotly
+requests
+pyarrow

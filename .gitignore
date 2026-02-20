@@ -205,3 +205,17 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# --- F1 Project Specifics ---
+# FastF1 Cache (This folder will get very large)
+data/f1_cache/
+
+# Streamlit local config/secrets
+.streamlit/secrets.toml
+
+# OS generated files
+.DS_Store
+
+# Test files
+inspect_data.py
+debug_audit.py
