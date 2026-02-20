@@ -1,10 +1,6 @@
 import pandas as pd
 import streamlit as st
 
-# ==========================================================
-# 1. RULE DEFINITIONS & HISTORICAL CONSTANTS
-# ==========================================================
-
 # Seasons with shortened races (Half-Points awarded)
 # Source: (Year, Round)
 HALF_POINTS_RACES = {
@@ -34,7 +30,7 @@ DROP_RULES = {
 }
 
 # ==========================================================
-# 2. CALCULATION ENGINE
+# Points Calculation Functions
 # ==========================================================
 
 def get_rule_for_year(year, rules_dict):
@@ -50,11 +46,11 @@ def calculate_base_points(row, points_list, data_year, rule_year, total_rounds):
         if 0 < pos <= len(points_list):
             pts = float(points_list[pos - 1])
             
-            # 1. 2014 Double Points (Finale only)
+            # 2014 Double Points (Finale only)
             if rule_year == 2014 and row['Round'] == total_rounds:
                 pts *= 2
             
-            # 2. Half-Points Rule (Shortened Races)
+            # Half-Points Rule (Shortened Races)
             if data_year in HALF_POINTS_RACES and row['Round'] in HALF_POINTS_RACES[data_year]:
                 pts *= 0.5
             factor = row.get('SharedFactor', 1.0)
@@ -65,16 +61,12 @@ def calculate_base_points(row, points_list, data_year, rule_year, total_rounds):
 
 def calculate_bonus_points(row, rule_year, total_rounds, fl_counts, data_year):
     bonus = 0.0
-    
-    # 1. Positional logic for modern checks
     try:
         val = row.get('ClassifiedPosition')
-        # We need this numeric 'pos' for both Sprints and Modern FL Top 10 rule
         pos = int(float(val)) if str(val).replace('.','').isdigit() else 999
     except:
         pos = 999
 
-    # 2. SPRINT HANDLING (Must be in bonus section as requested)
     if row.get('SessionType') == 'Sprint':
         if rule_year == 2021:
             s_pts = [3, 2, 1]
@@ -84,14 +76,14 @@ def calculate_bonus_points(row, rule_year, total_rounds, fl_counts, data_year):
             bonus = s_pts[pos-1] if pos <= 8 else 0.0
         return float(bonus) # Return immediately so Sprint drivers don't get FL points
 
-    # 3. FASTEST LAP HANDLING
+    # FASTEST LAP HANDLING
     if row.get('SessionType') == 'Race' and row.get('IsFastestLap', False):
-        # VINTAGE ERA (1950-1959): Awarded even if Retired/DQ'd
+        # 1950-1959: Awarded even if Retired/DQ'd
         if 1950 <= rule_year <= 1959:
             sharing = fl_counts.get(row['Round'], 1)
             bonus += (1.0 / sharing)
             
-        # MODERN ERA (2019-2024): Awarded only for Top 10 finish
+        # 2019-2024: Awarded only for Top 10 finish
         elif (2019 <= rule_year <= 2024) and pos <= 10:
             # Handle 2021 Spa 0-point exception
             if not (data_year == 2021 and row['Round'] == 12):
@@ -99,7 +91,7 @@ def calculate_bonus_points(row, rule_year, total_rounds, fl_counts, data_year):
                 
     return round(float(bonus),2)
 # ==========================================================
-# 3. PUBLIC API
+# Simulation Function
 # ==========================================================
 
 def simulate_season(df_raw, rule_year, data_year):
@@ -107,9 +99,7 @@ def simulate_season(df_raw, rule_year, data_year):
         return pd.DataFrame(columns=['Driver', 'SimulatedPoints'])
 
     df = df_raw.copy()
-    
-    # Fix the 'nan' Driver Issue: Force FullName to be the ID
-    # Since builder is now fixed, 'FullName' is our reliable key
+
     id_col = 'FullName' if 'FullName' in df.columns else 'Abbreviation'
     df[id_col] = df[id_col].fillna("Unknown Driver")
 
@@ -183,8 +173,6 @@ def get_actual_standings(df_raw, data_year):
     return actual_df
 
 def merge_comparison_table(sim_results, act_results):
-    # Merge on 'Driver' because simulate_season/get_actual_standings 
-    # both rename the ID column to 'Driver'
     comparison = pd.merge(
         sim_results, 
         act_results, 
@@ -192,12 +180,9 @@ def merge_comparison_table(sim_results, act_results):
         how='outer'
     ).fillna(0)
 
-    # Calculate Ranks based on both scenarios
-    # method='min' handles ties correctly (e.g., both 2nd = Rank 2)
     comparison['Actual_Rank'] = comparison['ActualPoints'].rank(ascending=False, method='min')
     comparison['Sim_Rank'] = comparison['SimulatedPoints'].rank(ascending=False, method='min')
 
-    # Calculate Delta (Official Rank - Simulated Rank)
     comparison['Pos_Delta'] = (comparison['Actual_Rank'] - comparison['Sim_Rank']).astype(int)
 
     def format_pos_delta(row):
@@ -215,11 +200,9 @@ def merge_comparison_table(sim_results, act_results):
 
     comparison['Change'] = comparison.apply(format_pos_delta, axis=1)
 
-    # Sort by Simulated Points
     final = comparison.sort_values(by='SimulatedPoints', ascending=False).reset_index(drop=True)
     final.insert(0, 'Rank', final.index + 1)
 
-    # Rename for cleaner UI display
     final = final.rename(columns={
         'ActualPoints': 'Official Points',
         'SimulatedPoints': 'Simulated Points'
@@ -229,17 +212,11 @@ def merge_comparison_table(sim_results, act_results):
 
 @st.cache_data
 def get_progression_data(df_raw, rule_year, data_year):
-    # 1. Get unique rounds and drivers
     rounds = sorted(df_raw['Round'].unique())
-    drivers = df_raw['FullName'].unique()
     
-    # 2. Setup output structure
     actual_prog = []
     sim_prog = []
     
-    # 3. Simulate Round-by-Round
-    # Note: We call simulate_season on slices of data to ensure 
-    # counting rules (like Drop Rules) are applied correctly at each stage.
     for r in rounds:
         current_data = df_raw[df_raw['Round'] <= r]
         

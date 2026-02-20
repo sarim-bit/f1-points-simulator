@@ -16,8 +16,6 @@ def get_safe_id(row):
     name = str(row['FullName']).strip()
     if name and name.lower() != 'nan':
         return name
-    # If name is missing, use number (rare, but safe)
-    return f"Driver {row['DriverNumber']}"
 
 def get_fastest_lap_data(session, year, round_num, points_list):
     res = session.results.copy()
@@ -32,18 +30,13 @@ def get_fastest_lap_data(session, year, round_num, points_list):
             val = str(row['ClassifiedPosition'])
             pos = int(float(val)) if val.replace('.','').isdigit() else 999
             
-            # 1. Get Base Points
             raw_base = points_list[pos-1] if pos <= len(points_list) else 0.0
             
-            # 2. Apply Shared Factor (Crucial for 1950s)
             factor = 1.0
             if val in shared_counts and shared_counts[val] > 1:
                 factor = 1.0 / shared_counts[val]
-            
             shared_base = raw_base * factor
-            
-            # 3. Detect Bonus
-            # We use a small tolerance for floating point math
+            # Small tolerance for floating point math
             return actual_pts > (shared_base + 0.1)
         except:
             return False
@@ -70,25 +63,15 @@ def clean_session_results(session, year, round_num, session_type):
     res = session.results.copy()
     points_list = get_rule_for_year(year, BASE_SCORING)
 
-    # 1. Standardize identities first
     res['FullName'] = res['FullName'].fillna("Driver " + res['DriverNumber'].astype(str))
     res['Abbreviation'] = res['Abbreviation'].fillna('')
-    
-    # 2. Get Fastest Lap status
-    # We use your existing detection logic here
     fl_flags = get_fastest_lap_data(session, year, round_num, points_list)
     res['IsFastestLap'] = fl_flags
 
-    # --- THE FIX: UNIFY METADATA FOR MULTIPLE ENTRIES ---
     if session_type == 'Race' and year <= 1960:
-        # Find the FullNames of anyone tagged with a Fastest Lap in this race
         fl_drivers = res[res['IsFastestLap'] == True]['FullName'].unique()
-        
-        # Apply True to ALL rows for those drivers (e.g., both the 'R' row and the '1' row)
         res.loc[res['FullName'].isin(fl_drivers), 'IsFastestLap'] = True
-    # ----------------------------------------------------
 
-    # 3. Handle Shared Factors and rest of columns
     if session_type == 'Race':
         res['SharedFactor'] = calculate_shared_drive_factors(res)
     else:
@@ -106,22 +89,17 @@ def fetch_and_clean_year(year):
         schedule = fastf1.get_event_schedule(year)
         races = schedule[schedule['RoundNumber'] > 0]
         all_data = []
-
-        # Determine if we need to load lap data (Post-1996)
         should_load_laps = True if year >= 1996 else False
 
         for _, event in races.iterrows():
             round_num = event['RoundNumber']
             print(f"  - Processing Round {round_num}...")
             
-            # --- MAIN RACE ---
             session = fastf1.get_session(year, round_num, 'R')
             session.load(laps=should_load_laps, telemetry=False, weather=False, messages=False)
-            
             race_res = clean_session_results(session, year, round_num, 'Race')
             all_data.append(race_res)
 
-            # --- SPRINT (If applicable) ---
             if 'sprint' in str(event['EventFormat']).lower():
                 s_session = fastf1.get_session(year, round_num, 'Sprint')
                 s_session.load(laps=False, telemetry=False, weather=False, messages=False)
@@ -136,11 +114,10 @@ def fetch_and_clean_year(year):
         return None
 
 if __name__ == "__main__":
-    # Range of years to build
-    for year in range(1950, 1960):
+    for year in range(1950, 2026):
         target_file = f"{OUTPUT_DIR}/season_{year}.parquet"
         
-        # RESUME LOGIC: Skip if file exists
+        # Skip if file exists
         if os.path.exists(target_file):
             continue
             
@@ -155,4 +132,4 @@ if __name__ == "__main__":
                 print(f" {year} seems incomplete. Not saving.")
         
         # Pause between years to let the API breathe
-        # time.sleep(5)
+        time.sleep(5)

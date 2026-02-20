@@ -37,7 +37,7 @@ with st.sidebar:
 if submitted:
     df_raw = load_processed_season(data_year)
     if not df_raw.empty:
-        # Run math once and store it
+
         sim_results = simulate_season(df_raw, rule_year, data_year)
         act_results = get_actual_standings(df_raw, data_year)
         
@@ -49,26 +49,52 @@ if submitted:
             'rule_year': rule_year
         }
 
-# 3. Check if we have stored data to display (this keeps it visible during re-runs)
+
 if st.session_state.sim_data is not None:
-    # Retrieve from state
     d = st.session_state.sim_data
-    
     tab1, tab2 = st.tabs(["📊 Standings", "📈 Season Progression"])
-    
+
     with tab1:
         final_table = merge_comparison_table(d['sim_results'], d['act_results'])
         st.subheader(f"Comparison: {d['data_year']} (Rules: {d['rule_year']})")
         st.dataframe(style_table(final_table), width='stretch', hide_index=True)
 
+        # We trigger specific notes based on the data_year selected
+        year = d['data_year']
+
+        if year == 1983:
+            st.info("""
+            **Historical Note: 1983 Brazilian GP**
+            Keke Rosberg (2nd) was disqualified for an illegal push-start in the pits. 
+            Uniquely, the stewards chose **not** to promote the drivers behind him, leaving 2nd place and its 6 points officially unawarded.
+            """)
+
+        elif year == 1954:
+            st.info("""
+            **Historical Note: 1954 British GP**
+            Seven different drivers set the identical fastest lap time (1:50.0). 
+            Under the rules of the era, the 1-point bonus was split equally among them, resulting in each driver receiving roughly **0.14 points**.
+            """)
+
+        elif year == 1984:
+            st.info("""
+            **Historical Note: 1984 Monaco GP**
+            The race was stopped early due to heavy rain. 
+            Because less than 75% of the race distance was completed, **Half-Points** were awarded to the top finishers.
+            """)
+
+        elif year == 2021:
+            st.info("""
+            **Historical Note: 2021 Belgian GP**
+            Due to extreme weather, the race was classified after only two laps behind the Safety Car. 
+            This resulted in **Half-Points** being awarded for only the sixth time in F1 history.
+            """)
+
     with tab2:
         st.subheader("Points Accumulation Throughout the Season")
-        
-        # 1. Get the data
         act_p, sim_p = get_progression_data(d['df_raw'], d['rule_year'], d['data_year'])
         
-        # 2. FILTER: Only show drivers who scored at least 1 point in either scenario
-        # This keeps the multiselect and the legend clean
+        # FILTER: Only show drivers who scored at least 1 point in either scenario
         scoring_drivers_act = act_p.groupby('Driver')['ActualPoints'].max()
         scoring_drivers_sim = sim_p.groupby('Driver')['SimulatedPoints'].max()
         
@@ -76,10 +102,7 @@ if st.session_state.sim_data is not None:
                 set(scoring_drivers_sim[scoring_drivers_sim > 0].index)
         
         all_scorers = sorted(list(scorers))
-        
-        # 3. Setup Selection UI
         top_5_default = d['sim_results'].head(5)['Driver'].tolist()
-        # Ensure default drivers are actually in the scorers list
         default_selection = [dr for dr in top_5_default if dr in all_scorers]
         
         selected_drivers = st.multiselect(
@@ -88,19 +111,16 @@ if st.session_state.sim_data is not None:
             default=default_selection
         )
 
-        # 4. COLOR MAPPING: 50 distinct shades
         distinct_colors = px.colors.qualitative.Alphabet + px.colors.qualitative.Light24
         color_map = {
             driver: distinct_colors[i % len(distinct_colors)] 
             for i, driver in enumerate(all_scorers)
         }
 
-        # 5. Filter data for plots
         filtered_act = act_p[act_p['Driver'].isin(selected_drivers)]
         filtered_sim = sim_p[sim_p['Driver'].isin(selected_drivers)]
 
         if not filtered_act.empty or not filtered_sim.empty:
-            # 6. Y-Axis Locking for "Apples-to-Apples" comparison
             y_act_range = [0, filtered_act['ActualPoints'].max() * 1.1]
             y_sim_range = [0, filtered_sim['SimulatedPoints'].max() * 1.1]
 
