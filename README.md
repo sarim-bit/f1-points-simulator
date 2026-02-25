@@ -5,7 +5,7 @@
 🔗 **Live App:** [f1-points-simulator.streamlit.app](https://f1-points-simulator.streamlit.app/)
 
 ## Features
-* **Full Historical Database**: Coverage from the inaugural 1950 season to the current 2025 season.
+* **Full Historical Database**: Coverage from the inaugural 1950 season to the latest 2025 season.
 * **Rulebook Swapping**: Apply scoring systems, drop-rules, and sprint points from any era to another.
 * **Championship Analytics**: Interactive tables showing Rank Deltas (▲/▼) and season-long points progression charts.
 * **Anomaly Handling**: Accounts for historical oddities like 1954's shared fastest laps and 1983's vacant podiums.
